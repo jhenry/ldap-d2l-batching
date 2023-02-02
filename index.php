@@ -18,21 +18,6 @@
       </h1>
     </header>
 
-    <main>
-      <p class="bold">Sandboxes and user batch files.</p>
-    
-      <form action="index.php" method="post">
-        <input type="text" name="custom_courses" value="Build-Your-Course-Sample,D2L-Sample-Eng1101,D2L-Sample-Outlines-Course,Lessons_d2l_sb-Sample">
-        <input type="text" name="custom_role" value="Learner">
-        <input type="text" name="sandbox_id" value="_SANDBOX_<?php echo date("Ym"); ?>">
-        <input type="text" name="sandbox_name" value="<?php echo date("my"); ?>: Sandbox Space">
-        <input type="text" name="attributes" value="uid,uvmEduUUID,givenName,uvmEduSurname,mail">
-        <input type="text" name="netids" placeholder="Feed me a comma separated list of NetID's.">
-        <button type="submit">Go</button>
-      </form>
-<pre>
-</pre>
-      <section class="dreams">
 <?php 
 
   if (isset($_POST['attributes'])) {
@@ -43,7 +28,10 @@
 	$custom_courses = explode(",", $_POST['custom_courses']);
 	$custom_role = $_POST['custom_role'];
 }
-
+else {
+$custom_courses = explode(",", "Build-Your-Course-Sample,D2L-Sample-Eng1101,D2L-Sample-Outlines-Course,Lessons_d2l_sb-Sample");
+$custom_role = "Learner";
+}
 ?>
 
 <?php if (isset($_POST['netids'])): ?>
@@ -51,8 +39,38 @@
     $people = getPeople($_POST['netids']);
     $id_postfix = $_POST['sandbox_id'];
     $title_postfix = $_POST['sandbox_name'];
-    
   ?>
+<?php else: ?>
+  <?php
+    $people = array();
+    $id_postfix = "_SANDBOX_" . date("Ym");
+    $title_postfix = date("my") . ": Sandbox Space";
+  ?>
+<?php endif; ?>
+    <main>
+      <p class="bold">Sandboxes and user batch files.</p>
+    
+      <form action="index.php" method="post">
+        <br />
+        <label>Custom enrollments:</label>
+        <input type="text" name="custom_courses" value="<?php echo implode(",", $custom_courses); ?>">
+        <input type="text" name="custom_role" value="<?php echo $custom_role; ?>">
+        <br />
+        <label>Sandbox naming:</label>
+        <input type="text" name="sandbox_id" value="<?php echo $id_postfix; ?>">
+        <input type="text" name="sandbox_name" value="<?php echo $title_postfix; ?>">
+        <input type="hidden" name="attributes" value="uid,uvmEduUUID,givenName,uvmEduSurname,mail">
+        <br />
+        <label>NetIDs to get from directory:</label>
+        <input type="text" name="netids" placeholder="Feed me a comma separated list of NetID's." value="<?php echo $_POST['netids'] ?? NULL ?>">
+        <button type="submit">Go</button>  (Or, <a href="">reset the form</a>)
+      </form>
+<pre>
+</pre>
+      <section class="dreams">
+<?php if (isset($_POST['netids'])): ?>
+
+<?php if ($people): ?>
 
 
       <p style="bold">Complete! <a href="results.zip">Download results.zip</a></p>
@@ -72,6 +90,11 @@
 
 <?php packageResults(); ?>
 
+<?php else: ?>
+
+      <p class="bold">FATAL ERROR: One or more NetID's were not found in the directory.</p>
+
+<?php endif; ?>
 <?php endif; ?>
 
       </section>
@@ -84,15 +107,26 @@
 
 function getPeople($usernames) {
     $people = array();
+    $missingNetids = array();
     $ldapSearch = new LDAPQuery();
     $netids = explode(",", $usernames);
     foreach( $netids as $netid ) {
       $entry = $ldapSearch->directory_query("uid", $netid);
+      if( !$entry ) {
+        echo "<p class=\"bold\">ERROR: Failed to find netid: $netid.</p>";
+        $missingNetids[] = $netid;
+      }
       $person = array_values($ldapSearch->cleanUpEntry($entry));
       $people[] = $person[0];
     }
     
-    return $people;
+    if( count($missingNetids) > 0 ) { 
+      return false; 
+    }
+    else {
+      return $people;
+    }
+
 }
 
 function printPeople($people, $attributes) {
@@ -105,6 +139,7 @@ function printPeople($people, $attributes) {
 
   //loop through users
   foreach( $people as $user ) {
+
     $row = array_intersect_key( $user, array_flip($attributes) );
 
     // fix columns for bulk create
